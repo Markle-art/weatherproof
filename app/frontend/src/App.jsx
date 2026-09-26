@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { kenyaCounties } from './kenyaCounties'
+import { conduitBaseline } from './conduitBaseline'
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import {
@@ -279,20 +280,38 @@ function App() {
   const visibility =
     current.visibility || 10000
 
+  // Compare live weather with the historical Conduit station baseline.
+  const conduitRainBaseline =
+    conduitBaseline.rainfall.maximum
+
+  const conduitWindBaseline =
+    conduitBaseline.wind.maximumGust * 3.6
+
+  const conduitHumidityBaseline =
+    conduitBaseline.humidity.average
+
+  const currentHumidity =
+    current.relative_humidity_2m || 0
+
+  const humidityAnomaly = Math.max(0, currentHumidity - conduitHumidityBaseline)
+
+  const windAnomaly = Math.max(0, windGusts - conduitWindBaseline)
+
   const floodScore = Math.min(
     100,
     Math.round(
-      rainProbability * 0.6 +
-      precipitation * 10
+      rainProbability * 0.5 +
+      precipitation * 8
     )
   )
 
   const roadScore = Math.min(
     100,
     Math.round(
-      rainProbability * 0.35 +
+      rainProbability * 0.3 +
       (100 - Math.min(visibility / 100, 100)) * 0.4 +
-      Math.min(windGusts, 80) * 0.25
+      Math.min(windGusts, 80) * 0.2 +
+      windAnomaly * 2
     )
   )
 
@@ -300,14 +319,18 @@ function App() {
     100,
     Math.round(
       (current.weather_code >= 95 ? 70 : 0) +
-      Math.min(windGusts, 100) * 0.3
+      Math.min(windGusts, 100) * 0.25 +
+      humidityAnomaly * 0.15
     )
   )
 
-  const overallRisk = Math.round(
-    floodScore * 0.45 +
-    roadScore * 0.35 +
-    severeScore * 0.2
+  const overallRisk = Math.min(
+    100,
+    Math.round(
+      floodScore * 0.45 +
+      roadScore * 0.35 +
+      severeScore * 0.2
+    )
   )
 
   const riskLevel =
@@ -333,7 +356,7 @@ function App() {
     <main className="weather-app">
       <header className="topbar">
         <div className="brand">
-          <span className="brand-mark">◒</span>
+          <span className="brand-mark">◉</span>
           <span>WeatherProof</span>
         </div>
 
@@ -652,6 +675,43 @@ function App() {
           </div>
           <p>{emergencyBrief}</p>
         </div>
+        <div className="conduit-panel">
+          <div className="conduit-panel-header">
+            <div>
+              <div className="conduit-panel-title">Conduit Intelligence</div>
+              <div className="conduit-panel-subtitle">Historical environmental baseline · JHUB Africa</div>
+            </div>
+            <span className="conduit-badge">CONDUIT DATA</span>
+          </div>
+
+          <div className="conduit-stats">
+            <div>
+              <strong>{conduitBaseline.observations.toLocaleString()}</strong>
+              <span>Observations</span>
+            </div>
+            <div>
+              <strong>{conduitBaseline.temperature.average}°C</strong>
+              <span>Avg temperature</span>
+            </div>
+            <div>
+              <strong>{conduitBaseline.humidity.average}%</strong>
+              <span>Avg humidity</span>
+            </div>
+            <div>
+              <strong>{conduitBaseline.wind.maximumGust * 3.6} m/s</strong>
+              <span>Max wind gust</span>
+            </div>
+            <div>
+              <strong>{conduitBaseline.rainfall.maximum} mm</strong>
+              <span>Max rainfall</span>
+            </div>
+          </div>
+
+          <div className="conduit-panel-footer">
+            <span>Period: {conduitBaseline.period}</span>
+            <span>Used in infrastructure risk analysis</span>
+          </div>
+        </div>
         <div className="risk-items">
           <div>
             <span>
@@ -858,7 +918,7 @@ function App() {
       <footer>
         <div className="brand">
           <span className="brand-mark">
-            ◒
+            ◉
           </span>
 
           <span>
@@ -876,6 +936,9 @@ function App() {
 }
 
 export default App
+
+
+
 
 
 
