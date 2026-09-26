@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react'
+import { kenyaCounties } from './kenyaCounties'
+import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
+import 'leaflet/dist/leaflet.css'
 import {
   Sun,
   Moon,
@@ -90,12 +93,69 @@ function formatDay(time, index) {
   })
 }
 
+function RiskMap({ counties, selectedCounty, riskLevel, rainProbability, precipitation, windGusts, visibility }) {
+  return (
+    <MapContainer
+      center={[-0.0236, 37.9062]}
+      zoom={6}
+      scrollWheelZoom={true}
+      style={{ height: '420px', width: '100%', borderRadius: '18px' }}
+    >
+      <TileLayer
+        attribution='&copy; OpenStreetMap contributors'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+
+      {counties.map((county) => {
+        const isSelected = county.name === selectedCounty.name
+
+        return (
+          <CircleMarker
+            key={county.name}
+            center={[county.latitude, county.longitude]}
+            radius={isSelected ? 12 : 6}
+            pathOptions={{
+              color: isSelected ? '#0f172a' : '#64748b',
+              fillColor: isSelected
+                ? riskLevel === 'HIGH'
+                  ? '#dc2626'
+                  : riskLevel === 'MEDIUM'
+                    ? '#f59e0b'
+                    : '#22c55e'
+                : '#94a3b8',
+              fillOpacity: isSelected ? 0.9 : 0.45,
+              weight: isSelected ? 3 : 1
+            }}
+          >
+            <Popup>
+              <strong>{county.name}</strong>
+              <br />
+              {isSelected ? (
+                <>
+                  <div>Infrastructure risk: {riskLevel}</div>
+                  <div>Rain probability: {rainProbability}%</div>
+                  <div>Precipitation: {precipitation} mm</div>
+                  <div>Wind gusts: {windGusts} km/h</div>
+                  <div>Visibility: {Math.round(visibility / 1000)} km</div>
+                </>
+              ) : (
+                'Select this county to view live weather'
+              )}
+            </Popup>
+          </CircleMarker>
+        )
+      })}
+    </MapContainer>
+  )
+}
 function App() {
   const [activeDay, setActiveDay] = useState(0)
   const [show24Hours, setShow24Hours] = useState(false)
   const [showAlert, setShowAlert] = useState(false)
   const [showRiskMap, setShowRiskMap] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
+  const [showLocationMenu, setShowLocationMenu] = useState(false)
+  const [location, setLocation] = useState({ ...kenyaCounties.find((county) => county.name === 'Nairobi'), country: 'Kenya', timezone: 'Africa/Nairobi' })
 
   const [weather, setWeather] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -106,12 +166,12 @@ function App() {
       try {
         const url =
           'https://api.open-meteo.com/v1/forecast' +
-          '?latitude=-1.286389' +
-          '&longitude=36.817223' +
+          '?latitude=' + location.latitude + 
+          '&longitude=' + location.longitude + 
           '&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,showers,weather_code,wind_speed_10m,wind_gusts_10m,visibility' +
           '&hourly=temperature_2m,precipitation_probability,weather_code' +
           '&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code' +
-          '&timezone=Africa%2FNairobi' +
+          '&timezone=' + encodeURIComponent(location.timezone) +
           '&forecast_days=7'
 
         const response = await fetch(url)
@@ -131,7 +191,7 @@ function App() {
     }
 
     loadWeather()
-  }, [])
+  }, [location])
 
   if (loading) {
     return (
@@ -256,6 +316,18 @@ function App() {
       : overallRisk >= 40
         ? 'MEDIUM'
         : 'LOW'
+  const emergencyBrief =
+    riskLevel === 'HIGH'
+      ? location.name + ' is currently showing elevated weather-related infrastructure risk. Rainfall, visibility, wind, or severe-weather conditions may affect roads and other critical infrastructure. Stay alert and follow local emergency guidance.'
+      : riskLevel === 'MEDIUM'
+        ? location.name + ' is showing moderate weather-related infrastructure risk. Changing rainfall, visibility, wind, or severe-weather conditions could cause localized disruption. Monitor conditions and plan accordingly.'
+        : location.name + ' is currently showing relatively low weather-related infrastructure risk. Conditions may still change, so continue monitoring the latest weather information.'
+  const riskReason =
+    overallRisk >= 70
+      ? 'Multiple weather signals indicate elevated infrastructure risk. Take precautions and monitor alerts.'
+      : overallRisk >= 40
+        ? 'Rainfall, visibility, wind, or severe-weather conditions may affect infrastructure.'
+        : 'Current weather signals indicate relatively low infrastructure risk.'
 
   return (
     <main className="weather-app">
@@ -265,11 +337,31 @@ function App() {
           <span>WeatherProof</span>
         </div>
 
-        <button className="location-button">
+        <button className="location-button" onClick={() => setShowLocationMenu(!showLocationMenu)}>
           <MapPin size={17} />
-          Nairobi, Kenya
+          {location.name}, Kenya
           <ChevronDown size={16} />
         </button>
+
+        {showLocationMenu && (
+          <div className="location-menu">
+            {kenyaCounties.map((county) => (
+              <button
+                key={county.name}
+                onClick={() => {
+                  setLocation({
+                    ...county,
+                    country: 'Kenya',
+                    timezone: 'Africa/Nairobi'
+                  })
+                  setShowLocationMenu(false)
+                }}
+              >
+                {county.name}
+              </button>
+            ))}
+          </div>
+        )}
 
         <button
           className="menu-button"
@@ -550,7 +642,16 @@ function App() {
             {riskLevel}
           </span>
         </div>
+        <p className="risk-reason">
+          {riskReason}
+        </p>
 
+        <div className="emergency-brief">
+          <div className="emergency-brief-title">
+            AI Emergency Brief
+          </div>
+          <p>{emergencyBrief}</p>
+        </div>
         <div className="risk-items">
           <div>
             <span>
@@ -651,12 +752,16 @@ function App() {
             may affect infrastructure.
           </p>
 
-          <div className="risk-map-placeholder">
-            Nairobi Risk Intelligence
-
-            <span>
-              Flooding • Roads • Severe Weather
-            </span>
+          <div className="risk-map">
+            <RiskMap
+              counties={kenyaCounties}
+              selectedCounty={location}
+              riskLevel={riskLevel}
+              rainProbability={rainProbability}
+              precipitation={precipitation}
+              windGusts={windGusts}
+              visibility={visibility}
+            />
           </div>
         </div>
       )}
@@ -771,3 +876,18 @@ function App() {
 }
 
 export default App
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
